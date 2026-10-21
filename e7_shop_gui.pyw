@@ -209,17 +209,20 @@ class App:
             self.count[key].grid(row=1, column=1, sticky="w")
             self.detail[key] = tk.Label(c, text=f"0 {unit}", font=(FONT, 9), fg=COLOR["muted"], bg=COLOR["card"])
             self.detail[key].grid(row=2, column=1, sticky="w")
+        self.all_time = tk.Label(body, font=(FONT, 9), fg=COLOR["muted"], bg=COLOR["bg"])
+        self.all_time.pack(anchor="w", pady=(6, 0))
 
-        # --- run stats ---
+        # --- this run (planned when stopped, progress while running) ---
         card = self.card(body, pady=(10, 0))
         stats = tk.Frame(card, bg=COLOR["card"])
         stats.pack(fill="x")
         stats.columnconfigure((0, 1, 2), weight=1, uniform="stats")
-        self.stats = {}
-        for i, (key, text) in enumerate([("refresh", "Refreshes"), ("sky", "Skystones"), ("gold", "Gold")]):
+        self.stats, self.captions = {}, {}
+        for i, key in enumerate(("refresh", "sky", "gold")):
             self.stats[key] = tk.Label(stats, text="0", font=(FONT, 14, "bold"), fg=COLOR["text"], bg=COLOR["card"])
             self.stats[key].grid(row=0, column=i)
-            tk.Label(stats, text=text, font=(FONT, 9), fg=COLOR["muted"], bg=COLOR["card"]).grid(row=1, column=i)
+            self.captions[key] = tk.Label(stats, font=(FONT, 9), fg=COLOR["muted"], bg=COLOR["card"])
+            self.captions[key].grid(row=1, column=i)
         self.bar = tk.Canvas(card, height=6, bg=COLOR["border"], highlightthickness=0)
         self.bar.pack(fill="x", pady=(12, 0))
         self.bar_fill = self.bar.create_rectangle(0, 0, 0, 6, fill=COLOR["amber"], width=0)
@@ -317,7 +320,7 @@ class App:
         if self.mode == "sky":
             refreshes = self.planned_refreshes()
             estimate = fmt_time(refreshes * shop.seconds_per_refresh())
-            text = f"= {refreshes} refreshes  ·  {estimate}  ·  {shop.REFRESH_COST} skystones each"
+            text = f"= {fmt(refreshes)} refreshes  ·  {estimate}  ·  {shop.REFRESH_COST} skystones each"
         else:
             text = f"= up to {fmt(self.read_limit())} gold  ·  no skystone limit"
         self.preview.configure(text=text)
@@ -333,24 +336,38 @@ class App:
         for key, _, unit, per_purchase, _ in ITEMS:
             self.count[key].configure(text=str(t[key]))
             self.detail[key].configure(text=f"{fmt(t[key] * per_purchase)} {unit}")
-        gold = t["covenant"] * shop.GOLD_COVENANT + t["mystic"] * shop.GOLD_MYSTIC
-        self.stats["refresh"].configure(text=fmt(t["refresh"]))
-        self.stats["sky"].configure(text=fmt(t["refresh"] * shop.REFRESH_COST))
-        self.stats["gold"].configure(text=fmt(gold))
+        self.all_time.configure(text=f"All time: {fmt(t['refresh'])} refreshes  ·  "
+                                     f"{fmt(t['refresh'] * shop.REFRESH_COST)} skystones  ·  "
+                                     f"{fmt(shop.gold_spent(t))} gold")
+
+        # the run box: what you chose while stopped, the progress while running
+        ref, gold = self.run["refresh"], shop.gold_spent(self.run)
         if self.running and self.run_mode == "gold":
-            done, total = shop.gold_spent(self.run), self.run_gold_limit
-            text = f"This run: {fmt(done)} / {fmt(total)} gold  ·  {self.run['refresh']} refreshes"
+            limit = self.run_gold_limit
+            values = (fmt(ref), "Refreshes", fmt(ref * shop.REFRESH_COST), "Skystones",
+                      fmt(gold), f"of {fmt(limit)} gold")
+            done, total = gold, limit
+            text = "This run  ·  no skystone limit"
         elif self.running:
-            done, total = self.run["refresh"], self.max_refreshes
+            total = self.max_refreshes
+            values = (fmt(ref), f"of {fmt(total)} refreshes", fmt(ref * shop.REFRESH_COST),
+                      f"of {fmt(total * shop.REFRESH_COST)} skystones", fmt(gold), "Gold")
+            done = ref
             # after the first refreshes, use the real pace instead of the estimate
-            pace = (time.time() - self.run_started) / done if done else shop.seconds_per_refresh()
-            text = f"This run: {done} / {total} refreshes  ·  {fmt_time((total - done) * pace)} left"
+            pace = (time.time() - self.run_started) / ref if ref else shop.seconds_per_refresh()
+            text = f"This run  ·  {fmt_time((total - ref) * pace)} left"
         elif self.mode == "gold":
-            done, total = 0, self.read_limit()
-            text = f"Next run: up to {fmt(total)} gold"
+            values = ("–", "Refreshes", "–", "Skystones", fmt(self.read_limit()), "Gold limit")
+            done, total = 0, 0
+            text = "Next run  ·  no skystone limit"
         else:
-            done, total = 0, self.planned_refreshes()
-            text = f"Next run: {total} refreshes  ·  {fmt_time(total * shop.seconds_per_refresh())}"
+            total = self.planned_refreshes()
+            values = (fmt(total), "Refreshes", fmt(total * shop.REFRESH_COST), "Skystones", "–", "Gold")
+            done = 0
+            text = f"Next run  ·  {fmt_time(total * shop.seconds_per_refresh())}"
+        for i, key in enumerate(("refresh", "sky", "gold")):
+            self.stats[key].configure(text=values[2 * i])
+            self.captions[key].configure(text=values[2 * i + 1])
         self.progress = done / total if total else 0
         self.run_label.configure(text=text)
         self.draw_bar()
