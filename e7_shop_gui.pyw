@@ -197,7 +197,7 @@ class App:
         grid = tk.Frame(body, bg=COLOR["bg"])
         grid.pack(fill="x", pady=(6, 0))
         grid.columnconfigure((0, 1), weight=1, uniform="items")
-        self.count, self.detail = {}, {}
+        self.count, self.detail, self.average = {}, {}, {}
         for i, (key, name, unit, _, color) in enumerate(ITEMS):
             c = tk.Frame(grid, bg=COLOR["card"], highlightthickness=1, highlightbackground=COLOR["border"],
                          padx=12, pady=12)
@@ -209,6 +209,8 @@ class App:
             self.count[key].grid(row=1, column=1, sticky="w")
             self.detail[key] = tk.Label(c, text=f"0 {unit}", font=(FONT, 9), fg=COLOR["muted"], bg=COLOR["card"])
             self.detail[key].grid(row=2, column=1, sticky="w")
+            self.average[key] = tk.Label(c, font=(FONT, 9), fg=COLOR["text"], bg=COLOR["card"])
+            self.average[key].grid(row=3, column=0, columnspan=2, sticky="w", pady=(8, 0))
         self.all_time = tk.Label(body, font=(FONT, 9), fg=COLOR["muted"], bg=COLOR["bg"])
         self.all_time.pack(anchor="w", pady=(6, 0))
 
@@ -336,6 +338,10 @@ class App:
         for key, _, unit, per_purchase, _ in ITEMS:
             self.count[key].configure(text=str(t[key]))
             self.detail[key].configure(text=f"{fmt(t[key] * per_purchase)} {unit}")
+            # average skystones spent per purchase of this item, over all runs
+            skystones = t["refresh"] * shop.REFRESH_COST
+            average = f"{fmt(round(skystones / t[key]))} skystones each" if t[key] else "–"
+            self.average[key].configure(text=f"Avg: {average}")
         self.all_time.configure(text=f"All time: {fmt(t['refresh'])} refreshes  ·  "
                                      f"{fmt(t['refresh'] * shop.REFRESH_COST)} skystones  ·  "
                                      f"{fmt(shop.gold_spent(t))} gold")
